@@ -9,6 +9,7 @@ import { MatomoEvent, EditorEvent, AIEvent } from '@remix-api'
 import { TrackingContext } from '@remix-ide/tracking'
 import { ConsoleLogs, EventManager, QueryParams } from '@remix-project/remix-lib'
 import { reducerActions, reducerListener, initialState } from './actions/editor'
+import { useSwarmDoc, SwarmDocSettings } from './hooks/useSwarmDoc'
 import { solidityTokensProvider, solidityLanguageConfig } from './syntaxes/solidity'
 import { cairoTokensProvider, cairoLanguageConfig } from './syntaxes/cairo'
 import { zokratesTokensProvider, zokratesLanguageConfig } from './syntaxes/zokrates'
@@ -177,6 +178,7 @@ export interface EditorUIProps {
   plugin: PluginType
   editorAPI: EditorAPIType
   setMonaco: (monaco: Monaco) => void
+  swarmDocSettings: SwarmDocSettings | null
 }
 const contextMenuEvent = new EventManager()
 export const EditorUI = (props: EditorUIProps) => {
@@ -222,6 +224,7 @@ export const EditorUI = (props: EditorUIProps) => {
   const editorRef = useRef(null)
   const monacoRef = useRef<Monaco>(null)
   const diffEditorRef = useRef<any>(null)
+  const [mountedEditor, setMountedEditor] = useState<any>(null)
 
   const currentFunction = useRef('')
   const currentFileRef = useRef('')
@@ -503,6 +506,11 @@ export const EditorUI = (props: EditorUIProps) => {
       monacoRef.current.editor.setModelLanguage(file.model, 'markdown')
     }
   }, [props.currentFile, props.isDiff])
+
+  const currentModel = editorModelsState[props.currentFile]?.model ?? null
+
+
+  const { peersCount, connected } = useSwarmDoc(props.swarmDocSettings, mountedEditor, props.currentFile, currentModel)
 
   // Load and sync diff sessions
   useEffect(() => {
@@ -938,6 +946,7 @@ export const EditorUI = (props: EditorUIProps) => {
 
   function handleEditorDidMount(editor) {
     editorRef.current = editor
+    setMountedEditor(editor)
     defineAndSetTheme(monacoRef.current)
     setReducerListener()
     props.events.onEditorMounted()
@@ -1837,6 +1846,11 @@ export const EditorUI = (props: EditorUIProps) => {
         className={props.isDiff ? "d-block" : "d-none"}
         data-id="diffEditor"
       />
+      {connected && (
+        <span className="position-absolute badge bg-success" style={{ top: 4, right: 8, zIndex: 10 }} data-id="collabPeersBadge">
+          {peersCount} peer{peersCount !== 1 ? 's' : ''}
+        </span>
+      )}
       <Editor
         width="100%"
         height={props.isDiff ? '0%' : '100%'}
