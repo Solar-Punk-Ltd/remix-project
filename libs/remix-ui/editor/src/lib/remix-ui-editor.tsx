@@ -9,6 +9,8 @@ import { MatomoEvent, EditorEvent, AIEvent } from '@remix-api'
 import { TrackingContext } from '@remix-ide/tracking'
 import { ConsoleLogs, EventManager, QueryParams } from '@remix-project/remix-lib'
 import { reducerActions, reducerListener, initialState } from './actions/editor'
+import { useSwarmDoc, SwarmDocSettings } from './hooks/useSwarmDoc'
+import { SwarmCollabModal } from './SwarmCollabModal'
 import { solidityTokensProvider, solidityLanguageConfig } from './syntaxes/solidity'
 import { cairoTokensProvider, cairoLanguageConfig } from './syntaxes/cairo'
 import { zokratesTokensProvider, zokratesLanguageConfig } from './syntaxes/zokrates'
@@ -103,8 +105,8 @@ type errorMarker = {
   }
   file: string
 }
-
-loader.config({ paths: { vs: 'assets/js/monaco-editor/min/vs' } })
+// relative path necessary for asset path resolution
+loader.config({ paths: { vs: './assets/js/monaco-editor/min/vs' } })
 
 const queryParams = new QueryParams()
 // @ts-ignore
@@ -177,6 +179,7 @@ export interface EditorUIProps {
   plugin: PluginType
   editorAPI: EditorAPIType
   setMonaco: (monaco: Monaco) => void
+  swarmDocSettings: SwarmDocSettings | null
 }
 const contextMenuEvent = new EventManager()
 export const EditorUI = (props: EditorUIProps) => {
@@ -222,6 +225,7 @@ export const EditorUI = (props: EditorUIProps) => {
   const editorRef = useRef(null)
   const monacoRef = useRef<Monaco>(null)
   const diffEditorRef = useRef<any>(null)
+  const [mountedEditor, setMountedEditor] = useState<any>(null)
 
   const currentFunction = useRef('')
   const currentFileRef = useRef('')
@@ -233,6 +237,9 @@ export const EditorUI = (props: EditorUIProps) => {
   // const registeredDecorations = useRef({}) // registered decorations
 
   const [editorModelsState, dispatch] = useReducer(reducerActions, initialState)
+  const [collabSettings, setCollabSettings] = useState<SwarmDocSettings | null>(null)
+  const [showCollabModal, setShowCollabModal] = useState(false)
+  const [showPeersList, setShowPeersList] = useState(false)
 
   const formatColor = (name) => {
     let color = window.getComputedStyle(document.documentElement).getPropertyValue(name).trim()
@@ -503,6 +510,11 @@ export const EditorUI = (props: EditorUIProps) => {
       monacoRef.current.editor.setModelLanguage(file.model, 'markdown')
     }
   }, [props.currentFile, props.isDiff])
+
+  const currentModel = editorModelsState[props.currentFile]?.model ?? null
+
+
+  const { peersCount, connected, peers } = useSwarmDoc(collabSettings, mountedEditor, props.currentFile, currentModel)
 
   // Load and sync diff sessions
   useEffect(() => {
@@ -938,6 +950,7 @@ export const EditorUI = (props: EditorUIProps) => {
 
   function handleEditorDidMount(editor) {
     editorRef.current = editor
+    setMountedEditor(editor)
     defineAndSetTheme(monacoRef.current)
     setReducerListener()
     props.events.onEditorMounted()
@@ -1837,6 +1850,74 @@ export const EditorUI = (props: EditorUIProps) => {
         className={props.isDiff ? "d-block" : "d-none"}
         data-id="diffEditor"
       />
+      <div className="position-absolute d-flex align-items-center gap-1" style={{ top: 4, right: 8, zIndex: 10 }}>
+        {connected && (
+          <div className="position-relative">
+            <button
+              className="badge bg-success border-0 py-1 px-2"
+              style={{ fontSize: '0.72rem', cursor: 'pointer' }}
+              onClick={() => setShowPeersList(v => !v)}
+              title="Show connected peers"
+              data-id="collabPeersBadge"
+            >
+              {peersCount} peer{peersCount !== 1 ? 's' : ''}
+            </button>
+            {showPeersList && (
+              <>
+                <div
+                  className="position-fixed top-0 start-0 w-100 h-100"
+                  style={{ zIndex: 99 }}
+                  onClick={() => setShowPeersList(false)}
+                />
+                <div
+                  className="position-absolute bg-body border rounded shadow-sm py-1"
+                  style={{ right: 0, top: '100%', marginTop: 4, minWidth: 200, zIndex: 100 }}
+                  data-id="collabPeersList"
+                >
+                  {peers.length === 0 ? (
+                    <div className="px-3 py-1 text-muted" style={{ fontSize: '0.75rem' }}>No peers yet</div>
+                  ) : peers.map(p => (
+                    <div key={p.address} className="d-flex align-items-center gap-2 px-3 py-1">
+                      <i className="fas fa-circle text-success" style={{ fontSize: '0.45rem', flexShrink: 0 }} />
+                      <span className="fw-semibold" style={{ fontSize: '0.78rem' }}>{p.nickname}</span>
+                      <span className="text-muted font-monospace ms-auto" style={{ fontSize: '0.68rem' }}>
+                        {p.address.slice(0, 8)}…
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+        <button
+          className={`btn btn-sm py-0 px-2 ${connected ? 'btn-success' : 'btn-outline-secondary'}`}
+          style={{ fontSize: '0.72rem', lineHeight: '1.4' }}
+          onClick={() => setShowCollabModal(true)}
+          title={connected ? 'Collaborative session active – click to share' : 'Start collaborative editing'}
+          data-id="collabBtn"
+        >
+          <i className="fas fa-users me-1" />
+          {connected ? 'Live' : 'Start Collab'}
+        </button>
+        {connected && (
+          <button
+            className="btn btn-sm py-0 px-2 btn-outline-danger"
+            style={{ fontSize: '0.72rem', lineHeight: '1.4' }}
+            onClick={() => { setCollabSettings(null); setShowPeersList(false) }}
+            title="Disconnect from collaborative session"
+            data-id="collabDisconnectBtn"
+          >
+            <i className="fas fa-times" />
+          </button>
+        )}
+      </div>
+      {showCollabModal && (
+        <SwarmCollabModal
+          onConfirm={(settings) => { setCollabSettings(settings); setShowCollabModal(false) }}
+          onClose={() => setShowCollabModal(false)}
+        />
+      )}
       <Editor
         width="100%"
         height={props.isDiff ? '0%' : '100%'}

@@ -113,6 +113,7 @@ export default class Editor extends Plugin {
       plugin={state.plugin}
       isDiff={state.isDiff}
       setMonaco={(monaco) => this.setMonaco(monaco)}
+      swarmDocSettings={null}
     />
   }
 
