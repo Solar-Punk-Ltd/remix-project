@@ -36,6 +36,7 @@ import { GenerationParams } from '@remix/remix-ai-core';
 import { RemixInLineCompletionProvider } from './providers/inlineCompletionProvider'
 import { RemixTSCompletionProvider } from './providers/tsCompletionProvider'
 import { TooltipPopOver, openContextualTooltip } from './tooltipPopOver'
+import { SwarmCollab } from './swarm-collab/SwarmCollab'
 
 const _paq = (window._paq = window._paq || []) // eslint-disable-line
 
@@ -2068,6 +2069,8 @@ export const EditorUI = (props: EditorUIProps) => {
           />
         </span>
       )}
+
+      <SwarmCollab plugin={props.plugin} editorRef={editorRef} monacoRef={monacoRef} currentFile={props.currentFile} hidden={props.isDiff} />
 
       {/* Web3 Keyword Tooltip */}
       {tooltipData && hasContextualEditorFeature && (
